@@ -13,6 +13,8 @@ RUN npm install
 # Копирование исходного кода
 COPY . .
 
+RUN npm run build
+
 # Открытие порта 3000 для React dev server
 EXPOSE 5555
 
