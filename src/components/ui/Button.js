@@ -179,7 +179,7 @@ const Button = ({
       variant={variant}
       size={size}
       fullWidth={fullWidth}
-      loading={loading}
+      loading={loading ? 'true' : undefined}
       disabled={disabled || loading}
       type={type}
       {...props}

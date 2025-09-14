@@ -1,29 +1,37 @@
 import axios from 'axios';
-import { 
-  mockAuthAPI, 
-  mockClientAPI, 
-  mockTransactionsAPI, 
-  mockTransfersAPI, 
-  mockPushAPI 
-} from './mockApi';
 
-// Базовый URL для API
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+// Конфигурация API для разных окружений
+const getApiConfig = () => {
+  const configs = {
+    development: {
+      baseURL: 'https://localhost:7175',
+      timeout: 10000,
+    },
+    production: {
+      baseURL: process.env.REACT_APP_API_URL || 'https://api.bcc.kz',
+      timeout: 15000,
+    },
+    test: {
+      baseURL: 'https://localhost:7175',
+      timeout: 5000,
+    }
+  };
+  
+  const env = process.env.NODE_ENV || 'development';
+  return configs[env] || configs.development;
+};
 
-// Флаг для использования мок API
-const USE_MOCK_API = !process.env.REACT_APP_API_URL || process.env.REACT_APP_API_URL.includes('localhost:3001');
-
-// Создаем экземпляр axios с базовой конфигурацией
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 10000,
+// Создание экземпляра axios с базовой конфигурацией
+const apiClient = axios.create({
+  baseURL: getApiConfig().baseURL,
+  timeout: getApiConfig().timeout,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
 // Интерцептор для добавления токена авторизации
-api.interceptors.request.use(
+apiClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('authToken');
     if (token) {
@@ -37,11 +45,13 @@ api.interceptors.request.use(
 );
 
 // Интерцептор для обработки ответов
-api.interceptors.response.use(
-  (response) => response,
+apiClient.interceptors.response.use(
+  (response) => {
+    return response;
+  },
   (error) => {
     if (error.response?.status === 401) {
-      // Токен истек или недействителен
+      // Токен недействителен, очищаем localStorage
       localStorage.removeItem('authToken');
       localStorage.removeItem('user');
       window.location.href = '/login';
@@ -50,46 +60,67 @@ api.interceptors.response.use(
   }
 );
 
-// API методы для авторизации
+// Auth API
 export const authAPI = {
-  // Регистрация нового клиента
+  // Регистрация пользователя
   register: async (userData) => {
-    if (USE_MOCK_API) {
-      return await mockAuthAPI.register(userData);
+    try {
+      const response = await apiClient.post('/auth/register', userData);
+      const { token, user } = response.data;
+      
+      // Сохраняем токен и данные пользователя
+      localStorage.setItem('authToken', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      
+      return { token, user };
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Ошибка регистрации');
     }
-    
-    const response = await api.post('/auth/register', userData);
-    return response.data;
   },
 
   // Вход в систему
   login: async (credentials) => {
-    let result;
-    
-    if (USE_MOCK_API) {
-      result = await mockAuthAPI.login(credentials);
-    } else {
-      const response = await api.post('/auth/login', credentials);
-      result = response.data;
+    try {
+      console.log('🔍 Отправляемые данные для логина:', credentials);
+      const response = await apiClient.post('/auth/login', credentials);
+      console.log('✅ Ответ сервера:', response.data);
+      const { token, user } = response.data;
+      
+      // Сохраняем токен и данные пользователя
+      localStorage.setItem('authToken', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      
+      return { token, user };
+    } catch (error) {
+      console.error('❌ Ошибка логина:', error);
+      console.error('❌ Статус ответа:', error.response?.status);
+      console.error('❌ Данные ошибки:', error.response?.data);
+      
+      // Детальная информация об ошибках валидации
+      if (error.response?.data?.errors) {
+        console.error('❌ Детали ошибок валидации:', error.response.data.errors);
+      }
+      
+      // Извлекаем сообщение об ошибке
+      let errorMessage = 'Ошибка входа в систему';
+      if (error.response?.data?.title) {
+        errorMessage = error.response.data.title;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+      
+      throw new Error(errorMessage);
     }
-    
-    const { token, user } = result;
-    
-    // Сохраняем токен и данные пользователя
-    localStorage.setItem('authToken', token);
-    localStorage.setItem('user', JSON.stringify(user));
-    
-    return result;
   },
 
   // Получение данных текущего пользователя
   getCurrentUser: async () => {
-    if (USE_MOCK_API) {
-      return await mockAuthAPI.getCurrentUser();
+    try {
+      const response = await apiClient.get('/auth/me');
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Ошибка получения данных пользователя');
     }
-    
-    const response = await api.get('/auth/me');
-    return response.data;
   },
 
   // Выход из системы
@@ -99,118 +130,166 @@ export const authAPI = {
   }
 };
 
-// API методы для клиентского кабинета
+// Client API
 export const clientAPI = {
   // Получение профиля клиента
   getProfile: async () => {
-    if (USE_MOCK_API) {
-      return await mockClientAPI.getProfile();
+    try {
+      const response = await apiClient.get('/client/profile');
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Ошибка получения профиля');
     }
-    
-    const response = await api.get('/client/profile');
-    return response.data;
   },
 
   // Получение баланса
   getBalance: async () => {
-    if (USE_MOCK_API) {
-      return await mockClientAPI.getBalance();
+    try {
+      const response = await apiClient.get('/client/balance');
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Ошибка получения баланса');
     }
-    
-    const response = await api.get('/client/balance');
-    return response.data;
   }
 };
 
-// API методы для транзакций
+// Transactions API
 export const transactionsAPI = {
   // Получение списка транзакций
   getTransactions: async (params = {}) => {
-    if (USE_MOCK_API) {
-      return await mockTransactionsAPI.getTransactions(params);
+    try {
+      const response = await apiClient.get('/transactions', { params });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Ошибка получения транзакций');
     }
-    
-    const response = await api.get('/transactions', { params });
-    return response.data;
   },
 
-  // Добавление новой транзакции
-  createTransaction: async (transactionData) => {
-    if (USE_MOCK_API) {
-      return await mockTransactionsAPI.createTransaction(transactionData);
+  // Добавление новой транзакции (упрощенная версия)
+  addTransaction: async (transactionData) => {
+    try {
+      const response = await apiClient.post('/transactions', transactionData);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Ошибка добавления транзакции');
     }
-    
-    const response = await api.post('/transactions', transactionData);
-    return response.data;
+  },
+
+  // Создание новой транзакции (Form Data для .NET Backend)
+  createTransaction: async (transactionData) => {
+    try {
+      const formData = new FormData();
+      Object.keys(transactionData).forEach(key => {
+        formData.append(key, transactionData[key]);
+      });
+
+      const response = await apiClient.post('/transactions', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Ошибка создания транзакции');
+    }
+  },
+
+  // Создание транзакции с JSON (альтернативный метод)
+  createTransactionJson: async (transactionData) => {
+    try {
+      const response = await apiClient.post('/transactions/json', transactionData);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Ошибка создания транзакции');
+    }
   }
 };
 
-// API методы для переводов
+// Transfers API
 export const transfersAPI = {
   // Получение списка переводов
   getTransfers: async (params = {}) => {
-    if (USE_MOCK_API) {
-      return await mockTransfersAPI.getTransfers(params);
+    try {
+      const response = await apiClient.get('/transfers', { params });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Ошибка получения переводов');
     }
-    
-    const response = await api.get('/transfers', { params });
-    return response.data;
   },
 
-  // Создание нового перевода
+  // Создание нового перевода (Form Data для .NET Backend)
   createTransfer: async (transferData) => {
-    if (USE_MOCK_API) {
-      return await mockTransfersAPI.createTransfer(transferData);
+    try {
+      const formData = new FormData();
+      Object.keys(transferData).forEach(key => {
+        formData.append(key, transferData[key]);
+      });
+
+      const response = await apiClient.post('/transfers', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Ошибка создания перевода');
     }
-    
-    const response = await api.post('/transfers', transferData);
-    return response.data;
+  },
+
+  // Создание перевода с JSON (альтернативный метод)
+  createTransferJson: async (transferData) => {
+    try {
+      const response = await apiClient.post('/transfers/json', transferData);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Ошибка создания перевода');
+    }
   }
 };
 
-// API методы для пуш-уведомлений
+// Push API (временно закомментировано, пока не реализовано в бэкенде)
 export const pushAPI = {
   // Получение последнего пуша
   getLatestPush: async () => {
-    if (USE_MOCK_API) {
-      return await mockPushAPI.getLatestPush();
+    try {
+      const response = await apiClient.get('/push/latest');
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Ошибка получения пуша');
     }
-    
-    const response = await api.get('/push/latest');
-    return response.data;
   },
 
   // Генерация нового пуша
   generatePush: async () => {
-    if (USE_MOCK_API) {
-      return await mockPushAPI.generatePush();
+    try {
+      const response = await apiClient.post('/push/generate');
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Ошибка генерации пуша');
     }
-    
-    const response = await api.post('/push/generate');
-    return response.data;
   },
 
-  // Получение рекомендаций для клиента
+  // Получение рекомендаций
   getRecommendation: async (clientCode) => {
-    if (USE_MOCK_API) {
-      return await mockPushAPI.getRecommendation(clientCode);
+    try {
+      const response = await apiClient.get(`/push/recommendation/${clientCode}`);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Ошибка получения рекомендаций');
     }
-    
-    const response = await api.get(`/recommendation/${clientCode}`);
-    return response.data;
   },
 
   // Скачивание CSV файла
   downloadPushes: async () => {
-    if (USE_MOCK_API) {
-      return await mockPushAPI.downloadPushes();
+    try {
+      const response = await apiClient.get('/push/download', {
+        responseType: 'blob',
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Ошибка скачивания файла');
     }
-    
-    const response = await api.get('/pushes/download', {
-      responseType: 'blob'
-    });
-    return response.data;
   }
 };
 
-export default api;
+export default apiClient;

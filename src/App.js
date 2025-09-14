@@ -12,6 +12,11 @@ import TransactionsPage from './pages/TransactionsPage';
 import TransfersPage from './pages/TransfersPage';
 import SettingsPage from './pages/SettingsPage';
 
+// Импорт утилиты для тестирования API (только в development)
+if (process.env.NODE_ENV === 'development') {
+  import('./utils/apiTest');
+}
+
 // Компонент для защищенных маршрутов
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -60,7 +65,12 @@ const PublicRoute = ({ children }) => {
 // Главный компонент приложения с навигацией
 const AppContent = () => {
   return (
-    <Router>
+    <Router
+      future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true
+      }}
+    >
       <Routes>
         {/* Публичные маршруты */}
         <Route 

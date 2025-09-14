@@ -110,7 +110,7 @@ const SwitchLink = styled.button`
 
 const LoginPage = () => {
   const [formData, setFormData] = useState({
-    client_code: '',
+    clientCode: '',
     password: ''
   });
   const [errors, setErrors] = useState({});
@@ -152,8 +152,8 @@ const LoginPage = () => {
   const validateForm = () => {
     const newErrors = {};
 
-    if (!formData.client_code.trim()) {
-      newErrors.client_code = 'Введите код клиента';
+    if (!formData.clientCode.trim()) {
+      newErrors.clientCode = 'Введите код клиента';
     }
 
     if (!formData.password.trim()) {
@@ -205,11 +205,11 @@ const LoginPage = () => {
         <Form onSubmit={handleSubmit}>
           <Input
             label="Код клиента"
-            name="client_code"
+            name="clientCode"
             type="text"
-            value={formData.client_code}
+            value={formData.clientCode}
             onChange={handleInputChange}
-            error={errors.client_code}
+            error={errors.clientCode}
             placeholder="Введите ваш код клиента"
             required
           />

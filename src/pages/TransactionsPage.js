@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import styled from 'styled-components';
 import { transactionsAPI } from '../services/api';
 import { theme } from '../styles/theme';
@@ -105,6 +105,11 @@ const TransactionStatus = styled.span`
     background-color: ${theme.colors.error}15;
     color: ${theme.colors.error};
   `}
+
+  ${props => props.status === 'cancelled' && `
+    background-color: ${theme.colors.gray400}15;
+    color: ${theme.colors.gray600};
+  `}
 `;
 
 const TransactionDetails = styled.div`
@@ -155,6 +160,75 @@ const FormRow = styled.div`
   }
 `;
 
+const PaginationContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: ${theme.spacing.sm};
+  margin-top: ${theme.spacing.lg};
+  padding: ${theme.spacing.md} 0;
+`;
+
+const PaginationButton = styled.button`
+  padding: ${theme.spacing.sm} ${theme.spacing.md};
+  border: 1px solid ${theme.colors.gray300};
+  border-radius: ${theme.borderRadius.lg};
+  background-color: ${props => props.active ? theme.colors.primary : theme.colors.white};
+  color: ${props => props.active ? theme.colors.white : theme.colors.textPrimary};
+  font-size: ${theme.typography.fontSize.sm};
+  font-weight: ${theme.typography.fontWeight.medium};
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 40px;
+
+  &:hover {
+    background-color: ${props => props.active ? theme.colors.primary : theme.colors.gray50};
+    border-color: ${theme.colors.primary};
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
+const SmallPaginationButton = styled.button`
+  padding: ${theme.spacing.xs} ${theme.spacing.sm};
+  border: 1px solid ${theme.colors.gray300};
+  border-radius: ${theme.borderRadius.md};
+  background-color: ${theme.colors.white};
+  color: ${theme.colors.textPrimary};
+  font-size: ${theme.typography.fontSize.xs};
+  font-weight: ${theme.typography.fontWeight.medium};
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 32px;
+  height: 32px;
+
+  &:hover {
+    background-color: ${theme.colors.gray50};
+    border-color: ${theme.colors.primary};
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
+const PaginationDots = styled.span`
+  padding: ${theme.spacing.sm} ${theme.spacing.xs};
+  color: ${theme.colors.textSecondary};
+  font-size: ${theme.typography.fontSize.sm};
+  user-select: none;
+`;
+
+const PaginationInfo = styled.div`
+  font-size: ${theme.typography.fontSize.sm};
+  color: ${theme.colors.textSecondary};
+  margin: 0 ${theme.spacing.md};
+`;
+
 const TransactionsPage = () => {
   const [transactions, setTransactions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -169,27 +243,57 @@ const TransactionsPage = () => {
     amountMax: ''
   });
   const [newTransaction, setNewTransaction] = useState({
-    amount: '',
-    description: '',
     category: '',
-    date: new Date().toISOString().split('T')[0]
+    amount: '',
+    currency: 'KZT',
+    clientCode: ''
   });
+  
+  // Пагинация
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
 
-  useEffect(() => {
-    loadTransactions();
-  }, [filters]);
-
-  const loadTransactions = async () => {
+  const loadTransactions = useCallback(async () => {
     try {
       setIsLoading(true);
-      const response = await transactionsAPI.getTransactions(filters);
-      setTransactions(response.transactions || []);
+      console.log('🔄 Загружаем транзакции из API...');
+      const response = await transactionsAPI.getTransactions();
+      console.log('📊 Полный ответ API:', response);
+      
+      let transactionsData = Array.isArray(response) ? response : response.transactions || [];
+      console.log('📋 Полученные данные:', transactionsData);
+      
+      if (transactionsData.length > 0) {
+        console.log('📋 Первая транзакция (для анализа):', transactionsData[0]);
+        console.log('📋 Поля первой транзакции:', Object.keys(transactionsData[0]));
+      }
+      
+      // Нормализуем данные
+      transactionsData = transactionsData.map(transaction => ({
+        ...transaction,
+        currency: (transaction.currency && 
+                  transaction.currency !== 'string' && 
+                  typeof transaction.currency === 'string' &&
+                  ['KZT', 'USD', 'EUR', 'RUB'].includes(transaction.currency)) 
+          ? transaction.currency 
+          : 'KZT',
+        status: transaction.status || 'completed',
+        clientCode: transaction.clientCode || transaction.client_code || '—',
+        amount: typeof transaction.amount === 'number' ? transaction.amount : parseFloat(transaction.amount) || 0
+      }));
+      
+      console.log('✅ Финальные данные транзакций:', transactionsData);
+      setTransactions(transactionsData);
     } catch (error) {
-      console.error('Ошибка загрузки транзакций:', error);
+      console.error('❌ Ошибка загрузки транзакций:', error);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadTransactions();
+  }, [loadTransactions]);
 
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
@@ -217,27 +321,40 @@ const TransactionsPage = () => {
   const handleAddTransaction = async (e) => {
     e.preventDefault();
     try {
-      await transactionsAPI.createTransaction(newTransaction);
+      await transactionsAPI.addTransaction(newTransaction);
       setShowAddModal(false);
       setNewTransaction({
-        amount: '',
-        description: '',
         category: '',
-        date: new Date().toISOString().split('T')[0]
+        amount: '',
+        currency: 'KZT',
+        clientCode: ''
       });
       loadTransactions();
     } catch (error) {
-      console.error('Ошибка добавления транзакции:', error);
+      console.error('Ошибка создания транзакции:', error);
     }
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('ru-KZ', {
-      style: 'currency',
-      currency: 'KZT',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
+  const formatCurrency = (amount, currency = 'KZT') => {
+    if (typeof currency !== 'string' || currency === 'string' || currency === '') {
+      currency = 'KZT';
+    }
+    
+    const validCurrencies = ['KZT', 'USD', 'EUR', 'RUB'];
+    const safeCurrency = validCurrencies.includes(currency) ? currency : 'KZT';
+    const safeAmount = typeof amount === 'number' ? amount : parseFloat(amount) || 0;
+    
+    try {
+      return new Intl.NumberFormat('ru-KZ', {
+        style: 'currency',
+        currency: safeCurrency,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      }).format(safeAmount);
+    } catch (error) {
+      console.warn('Ошибка форматирования валюты:', error);
+      return `${safeAmount} ${safeCurrency}`;
+    }
   };
 
   const formatDate = (dateString) => {
@@ -251,11 +368,172 @@ const TransactionsPage = () => {
   const getStatusText = (status) => {
     switch (status) {
       case 'completed': return 'Завершена';
+      case 'success': return 'Завершена';
       case 'pending': return 'В обработке';
+      case 'processing': return 'В обработке';
       case 'failed': return 'Ошибка';
-      default: return 'Неизвестно';
+      case 'error': return 'Ошибка';
+      case 'cancelled': return 'Отменена';
+      case 'canceled': return 'Отменена';
+      default: return 'Завершена';
     }
   };
+
+  const getCategoryText = (category) => {
+    const categories = {
+      food: 'Питание',
+      transport: 'Транспорт',
+      shopping: 'Покупки',
+      entertainment: 'Развлечения',
+      utilities: 'Коммунальные услуги',
+      healthcare: 'Здравоохранение',
+      education: 'Образование',
+      salary: 'Зарплата',
+      other: 'Другое'
+    };
+    return categories[category] || category || '—';
+  };
+
+  const getDescription = (transaction) => {
+    if (transaction.amount > 0) {
+      return 'Зарплата';
+    } else {
+      const categoryDescriptions = {
+        food: 'Покупка в супермаркете',
+        transport: 'Оплата проезда',
+        shopping: 'Покупка товаров',
+        entertainment: 'Развлечения',
+        utilities: 'Коммунальные услуги',
+        healthcare: 'Медицинские услуги',
+        education: 'Образование',
+        other: 'Прочие расходы'
+      };
+      return categoryDescriptions[transaction.category] || 'Транзакция';
+    }
+  };
+
+  const applyFilters = () => {
+    let filtered = [...transactions];
+
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      filtered = filtered.filter(transaction => 
+        getDescription(transaction).toLowerCase().includes(searchLower) ||
+        getCategoryText(transaction.category).toLowerCase().includes(searchLower) ||
+        transaction.clientCode.toLowerCase().includes(searchLower)
+      );
+    }
+
+    if (filters.category) {
+      filtered = filtered.filter(transaction => transaction.category === filters.category);
+    }
+
+    if (filters.dateFrom) {
+      filtered = filtered.filter(transaction => {
+        const transactionDate = new Date(transaction.date || transaction.createdAt || new Date());
+        return transactionDate >= new Date(filters.dateFrom);
+      });
+    }
+
+    if (filters.dateTo) {
+      filtered = filtered.filter(transaction => {
+        const transactionDate = new Date(transaction.date || transaction.createdAt || new Date());
+        return transactionDate <= new Date(filters.dateTo + 'T23:59:59');
+      });
+    }
+
+    if (filters.amountMin) {
+      filtered = filtered.filter(transaction => Math.abs(transaction.amount) >= parseFloat(filters.amountMin));
+    }
+
+    if (filters.amountMax) {
+      filtered = filtered.filter(transaction => Math.abs(transaction.amount) <= parseFloat(filters.amountMax));
+    }
+
+    return filtered;
+  };
+
+  const filteredTransactions = applyFilters();
+
+  // Пагинация
+  const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentTransactions = filteredTransactions.slice(startIndex, endIndex);
+
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
+  };
+
+  const handlePrevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  // Сброс пагинации при изменении фильтров
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters]);
+
+  // Функция для генерации умной пагинации
+  const generatePaginationPages = () => {
+    const pages = [];
+    const maxVisiblePages = 3; // Показываем максимум 3 страницы вокруг текущей
+    
+    if (totalPages <= 7) {
+      // Если страниц мало, показываем все
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      // Всегда показываем первую страницу
+      pages.push(1);
+      
+      if (currentPage <= 4) {
+        // Если мы в начале (страницы 1-4)
+        for (let i = 2; i <= 5; i++) {
+          pages.push(i);
+        }
+        pages.push('...');
+        pages.push(totalPages);
+      } else if (currentPage >= totalPages - 3) {
+        // Если мы в конце (последние 4 страницы)
+        pages.push('...');
+        for (let i = totalPages - 4; i <= totalPages; i++) {
+          pages.push(i);
+        }
+      } else {
+        // Если мы в середине
+        pages.push('...');
+        for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+          pages.push(i);
+        }
+        pages.push('...');
+        pages.push(totalPages);
+      }
+    }
+    
+    return pages;
+  };
+
+  const categories = [
+    { value: 'food', label: 'Питание' },
+    { value: 'transport', label: 'Транспорт' },
+    { value: 'shopping', label: 'Покупки' },
+    { value: 'entertainment', label: 'Развлечения' },
+    { value: 'utilities', label: 'Коммунальные услуги' },
+    { value: 'healthcare', label: 'Здравоохранение' },
+    { value: 'education', label: 'Образование' },
+    { value: 'salary', label: 'Зарплата' },
+    { value: 'other', label: 'Другое' }
+  ];
 
   return (
     <TransactionsContainer>
@@ -279,13 +557,39 @@ const TransactionsPage = () => {
             onChange={handleFilterChange}
             placeholder="Поиск по описанию..."
           />
-          <Input
-            label="Категория"
-            name="category"
-            value={filters.category}
-            onChange={handleFilterChange}
-            placeholder="Категория транзакции"
-          />
+          <div>
+            <label style={{ 
+              display: 'block', 
+              fontSize: theme.typography.fontSize.sm,
+              fontWeight: theme.typography.fontWeight.medium,
+              color: theme.colors.textPrimary,
+              marginBottom: theme.spacing.xs
+            }}>
+              Категория
+            </label>
+            <select
+              name="category"
+              value={filters.category}
+              onChange={handleFilterChange}
+              style={{
+                width: '100%',
+                padding: theme.spacing.sm,
+                border: `1px solid ${theme.colors.gray300}`,
+                borderRadius: theme.borderRadius.lg,
+                fontSize: theme.typography.fontSize.base,
+                fontFamily: theme.typography.fontFamily,
+                backgroundColor: theme.colors.white,
+                minHeight: '44px'
+              }}
+            >
+              <option value="">Все категории</option>
+              {categories.map(category => (
+                <option key={category.value} value={category.value}>
+                  {category.label}
+                </option>
+              ))}
+            </select>
+          </div>
           <Input
             label="Дата от"
             name="dateFrom"
@@ -348,19 +652,19 @@ const TransactionsPage = () => {
               </Table.Row>
             </Table.Header>
             <Table.Body>
-              {transactions.length > 0 ? (
-                transactions.map((transaction, index) => (
+              {currentTransactions.length > 0 ? (
+                currentTransactions.map((transaction, index) => (
                   <Table.Row 
-                    key={index} 
+                    key={transaction.id || index} 
                     clickable
                     onClick={() => handleTransactionClick(transaction)}
                   >
-                    <Table.Cell>{formatDate(transaction.date)}</Table.Cell>
-                    <Table.Cell>{transaction.description || 'Транзакция'}</Table.Cell>
-                    <Table.Cell>{transaction.category || '—'}</Table.Cell>
+                    <Table.Cell>{formatDate(transaction.date || transaction.createdAt || new Date())}</Table.Cell>
+                    <Table.Cell>{getDescription(transaction)}</Table.Cell>
+                    <Table.Cell>{getCategoryText(transaction.category)}</Table.Cell>
                     <Table.Cell align="right" numeric>
                       <TransactionAmount positive={transaction.amount > 0}>
-                        {transaction.amount > 0 ? '+' : ''}{formatCurrency(transaction.amount)}
+                        {transaction.amount > 0 ? '+' : ''}{formatCurrency(transaction.amount, transaction.currency || 'KZT')}
                       </TransactionAmount>
                     </Table.Cell>
                     <Table.Cell>
@@ -374,7 +678,7 @@ const TransactionsPage = () => {
                 <Table.Row>
                   <Table.Cell colSpan="5">
                     <Table.EmptyState>
-                      <Table.EmptyStateIcon>📋</Table.EmptyStateIcon>
+                      <Table.EmptyStateIcon>💳</Table.EmptyStateIcon>
                       <Table.EmptyStateText>Транзакции не найдены</Table.EmptyStateText>
                       <Table.EmptyStateSubtext>
                         Попробуйте изменить параметры поиска
@@ -385,6 +689,48 @@ const TransactionsPage = () => {
               )}
             </Table.Body>
           </Table>
+        )}
+        
+        {/* Пагинация */}
+        {filteredTransactions.length > itemsPerPage && (
+          <PaginationContainer>
+            {/* Маленькие кнопки назад/вперед */}
+            <SmallPaginationButton 
+              onClick={handlePrevPage} 
+              disabled={currentPage === 1}
+              title="Предыдущая страница"
+            >
+              ←
+            </SmallPaginationButton>
+            
+            {/* Основные кнопки страниц */}
+            {generatePaginationPages().map((page, index) => (
+              page === '...' ? (
+                <PaginationDots key={`dots-${index}`}>...</PaginationDots>
+              ) : (
+                <PaginationButton
+                  key={page}
+                  active={currentPage === page}
+                  onClick={() => handlePageChange(page)}
+                >
+                  {page}
+                </PaginationButton>
+              )
+            ))}
+            
+            {/* Маленькие кнопки назад/вперед */}
+            <SmallPaginationButton 
+              onClick={handleNextPage} 
+              disabled={currentPage === totalPages}
+              title="Следующая страница"
+            >
+              →
+            </SmallPaginationButton>
+            
+            <PaginationInfo>
+              Показано {startIndex + 1}-{Math.min(endIndex, filteredTransactions.length)} из {filteredTransactions.length}
+            </PaginationInfo>
+          </PaginationContainer>
         )}
       </TransactionsTable>
 
@@ -399,23 +745,31 @@ const TransactionsPage = () => {
           <TransactionDetails>
             <DetailRow>
               <DetailLabel>Дата и время:</DetailLabel>
-              <DetailValue>{formatDateTime(selectedTransaction.date)}</DetailValue>
+              <DetailValue>{formatDateTime(selectedTransaction.date || selectedTransaction.createdAt || new Date())}</DetailValue>
             </DetailRow>
             <DetailRow>
               <DetailLabel>Описание:</DetailLabel>
-              <DetailValue>{selectedTransaction.description || '—'}</DetailValue>
+              <DetailValue>{getDescription(selectedTransaction)}</DetailValue>
             </DetailRow>
             <DetailRow>
               <DetailLabel>Категория:</DetailLabel>
-              <DetailValue>{selectedTransaction.category || '—'}</DetailValue>
+              <DetailValue>{getCategoryText(selectedTransaction.category)}</DetailValue>
+            </DetailRow>
+            <DetailRow>
+              <DetailLabel>Код клиента:</DetailLabel>
+              <DetailValue>{selectedTransaction.clientCode || '—'}</DetailValue>
             </DetailRow>
             <DetailRow>
               <DetailLabel>Сумма:</DetailLabel>
               <DetailValue>
                 <TransactionAmount positive={selectedTransaction.amount > 0}>
-                  {selectedTransaction.amount > 0 ? '+' : ''}{formatCurrency(selectedTransaction.amount)}
+                  {selectedTransaction.amount > 0 ? '+' : ''}{formatCurrency(selectedTransaction.amount, selectedTransaction.currency || 'KZT')}
                 </TransactionAmount>
               </DetailValue>
+            </DetailRow>
+            <DetailRow>
+              <DetailLabel>Валюта:</DetailLabel>
+              <DetailValue>{selectedTransaction.currency && selectedTransaction.currency !== 'string' ? selectedTransaction.currency : 'KZT'}</DetailValue>
             </DetailRow>
             <DetailRow>
               <DetailLabel>Статус:</DetailLabel>
@@ -425,17 +779,17 @@ const TransactionsPage = () => {
                 </TransactionStatus>
               </DetailValue>
             </DetailRow>
-            {selectedTransaction.reference && (
+            {selectedTransaction.id && (
               <DetailRow>
-                <DetailLabel>Номер операции:</DetailLabel>
-                <DetailValue>{selectedTransaction.reference}</DetailValue>
+                <DetailLabel>ID транзакции:</DetailLabel>
+                <DetailValue>{selectedTransaction.id}</DetailValue>
               </DetailRow>
             )}
           </TransactionDetails>
         )}
       </Modal>
 
-      {/* Модальное окно добавления транзакции */}
+      {/* Модальное окно создания транзакции */}
       <Modal
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
@@ -444,8 +798,45 @@ const TransactionsPage = () => {
       >
         <AddTransactionForm onSubmit={handleAddTransaction}>
           <FormRow>
+            <div>
+              <label style={{ 
+                display: 'block', 
+                fontSize: theme.typography.fontSize.sm,
+                fontWeight: theme.typography.fontWeight.medium,
+                color: theme.colors.textPrimary,
+                marginBottom: theme.spacing.xs
+              }}>
+                Категория *
+              </label>
+              <select
+                name="category"
+                value={newTransaction.category}
+                onChange={(e) => setNewTransaction(prev => ({
+                  ...prev,
+                  category: e.target.value
+                }))}
+                style={{
+                  width: '100%',
+                  padding: theme.spacing.sm,
+                  border: `1px solid ${theme.colors.gray300}`,
+                  borderRadius: theme.borderRadius.lg,
+                  fontSize: theme.typography.fontSize.base,
+                  fontFamily: theme.typography.fontFamily,
+                  backgroundColor: theme.colors.white,
+                  minHeight: '44px'
+                }}
+                required
+              >
+                <option value="">Выберите категорию</option>
+                {categories.map(category => (
+                  <option key={category.value} value={category.value}>
+                    {category.label}
+                  </option>
+                ))}
+              </select>
+            </div>
             <Input
-              label="Сумма"
+              label="Сумма *"
               name="amount"
               type="number"
               value={newTransaction.amount}
@@ -456,39 +847,57 @@ const TransactionsPage = () => {
               placeholder="0"
               required
             />
+          </FormRow>
+          
+          <FormRow>
+            <div>
+              <label style={{ 
+                display: 'block', 
+                fontSize: theme.typography.fontSize.sm,
+                fontWeight: theme.typography.fontWeight.medium,
+                color: theme.colors.textPrimary,
+                marginBottom: theme.spacing.xs
+              }}>
+                Валюта *
+              </label>
+              <select
+                name="currency"
+                value={newTransaction.currency}
+                onChange={(e) => setNewTransaction(prev => ({
+                  ...prev,
+                  currency: e.target.value
+                }))}
+                style={{
+                  width: '100%',
+                  padding: theme.spacing.sm,
+                  border: `1px solid ${theme.colors.gray300}`,
+                  borderRadius: theme.borderRadius.lg,
+                  fontSize: theme.typography.fontSize.base,
+                  fontFamily: theme.typography.fontFamily,
+                  backgroundColor: theme.colors.white,
+                  minHeight: '44px'
+                }}
+                required
+              >
+                <option value="KZT">KZT (Тенге)</option>
+                <option value="USD">USD (Доллар)</option>
+                <option value="EUR">EUR (Евро)</option>
+                <option value="RUB">RUB (Рубль)</option>
+              </select>
+            </div>
             <Input
-              label="Дата"
-              name="date"
-              type="date"
-              value={newTransaction.date}
+              label="Код клиента *"
+              name="clientCode"
+              value={newTransaction.clientCode}
               onChange={(e) => setNewTransaction(prev => ({
                 ...prev,
-                date: e.target.value
+                clientCode: e.target.value
               }))}
+              placeholder="Введите код клиента"
               required
             />
           </FormRow>
-          <Input
-            label="Описание"
-            name="description"
-            value={newTransaction.description}
-            onChange={(e) => setNewTransaction(prev => ({
-              ...prev,
-              description: e.target.value
-            }))}
-            placeholder="Описание транзакции"
-            required
-          />
-          <Input
-            label="Категория"
-            name="category"
-            value={newTransaction.category}
-            onChange={(e) => setNewTransaction(prev => ({
-              ...prev,
-              category: e.target.value
-            }))}
-            placeholder="Категория транзакции"
-          />
+          
           <Modal.Footer border>
             <Button 
               type="button" 
@@ -498,7 +907,7 @@ const TransactionsPage = () => {
               Отмена
             </Button>
             <Button type="submit" variant="primary">
-              Добавить
+              Добавить транзакцию
             </Button>
           </Modal.Footer>
         </AddTransactionForm>

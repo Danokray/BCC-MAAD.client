@@ -110,18 +110,22 @@ export const AuthProvider = ({ children }) => {
           // Проверяем токен на сервере
           const user = await authAPI.getCurrentUser();
           
+          // Обновляем данные пользователя в localStorage
+          localStorage.setItem('user', JSON.stringify(user));
+          
           dispatch({
             type: AUTH_ACTIONS.LOAD_USER_SUCCESS,
             payload: user
           });
         } catch (error) {
+          console.error('Load user error:', error);
           // Токен недействителен, очищаем localStorage
           localStorage.removeItem('authToken');
           localStorage.removeItem('user');
           
           dispatch({
             type: AUTH_ACTIONS.LOAD_USER_FAILURE,
-            payload: error.response?.data?.message || 'Ошибка загрузки пользователя'
+            payload: error.message || 'Ошибка загрузки пользователя'
           });
         }
       } else {
@@ -139,6 +143,10 @@ export const AuthProvider = ({ children }) => {
       
       const response = await authAPI.login(credentials);
       
+      // Сохраняем токен и пользователя в localStorage
+      localStorage.setItem('authToken', response.token);
+      localStorage.setItem('user', JSON.stringify(response.user));
+      
       dispatch({
         type: AUTH_ACTIONS.LOGIN_SUCCESS,
         payload: response
@@ -146,7 +154,8 @@ export const AuthProvider = ({ children }) => {
 
       return response;
     } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Ошибка входа в систему';
+      console.error('Login error in context:', error);
+      const errorMessage = error.message || 'Ошибка входа в систему';
       
       dispatch({
         type: AUTH_ACTIONS.LOGIN_FAILURE,
@@ -163,6 +172,10 @@ export const AuthProvider = ({ children }) => {
       dispatch({ type: AUTH_ACTIONS.REGISTER_START });
       
       const response = await authAPI.register(userData);
+      
+      // Сохраняем токен и пользователя в localStorage
+      localStorage.setItem('authToken', response.token);
+      localStorage.setItem('user', JSON.stringify(response.user));
       
       dispatch({
         type: AUTH_ACTIONS.REGISTER_SUCCESS,
@@ -184,7 +197,10 @@ export const AuthProvider = ({ children }) => {
 
   // Функция выхода
   const logout = () => {
-    authAPI.logout();
+    // Очищаем localStorage
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('user');
+    
     dispatch({ type: AUTH_ACTIONS.LOGOUT });
   };
 

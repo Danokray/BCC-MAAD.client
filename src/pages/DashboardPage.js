@@ -251,18 +251,18 @@ const DashboardPage = () => {
       try {
         setIsLoading(true);
         
-        // Загружаем данные параллельно
-        const [profileData, balanceData, transactionsData, pushData] = await Promise.all([
+        // Загружаем данные параллельно (Push API может быть недоступен)
+        const [profileData, balanceData, transactionsData, pushData] = await Promise.allSettled([
           clientAPI.getProfile(),
           clientAPI.getBalance(),
           transactionsAPI.getTransactions({ limit: 5 }),
-          pushAPI.getLatestPush()
+          pushAPI.getLatestPush().catch(() => null) // Игнорируем ошибки Push API
         ]);
 
-        setProfile(profileData);
-        setBalance(balanceData);
-        setRecentTransactions(transactionsData.transactions || []);
-        setLatestPush(pushData);
+        setProfile(profileData.status === 'fulfilled' ? profileData.value : null);
+        setBalance(balanceData.status === 'fulfilled' ? balanceData.value : null);
+        setRecentTransactions(transactionsData.status === 'fulfilled' ? (transactionsData.value.transactions || []) : []);
+        setLatestPush(pushData.status === 'fulfilled' ? pushData.value : null);
 
         // Загружаем рекомендации если есть код клиента
         if (user?.client_code) {
