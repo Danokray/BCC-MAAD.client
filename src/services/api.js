@@ -4,7 +4,7 @@ import axios from 'axios';
 const getApiConfig = () => {
   const configs = {
     development: {
-      baseURL: 'https://localhost:7175',
+      baseURL: process.env.REACT_APP_API_URL,
       timeout: 10000,
     },
     production: {
