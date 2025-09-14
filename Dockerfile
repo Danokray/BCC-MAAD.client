@@ -15,6 +15,8 @@ COPY . .
 
 RUN npm run build
 
+RUN npm install -g serve
+
 # Открытие порта 3000 для React dev server
 EXPOSE 5555
 
