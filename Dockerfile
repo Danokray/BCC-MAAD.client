@@ -14,7 +14,7 @@ RUN npm install
 COPY . .
 
 # Открытие порта 3000 для React dev server
-EXPOSE 3000
+EXPOSE 5555
 
 # Запуск React приложения в режиме разработки
 CMD ["npm", "start"]
