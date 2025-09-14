@@ -242,6 +242,7 @@ const DashboardPage = () => {
   const [profile, setProfile] = useState(null);
   const [balance, setBalance] = useState(null);
   const [recentTransactions, setRecentTransactions] = useState([]);
+  const [monthlyTransactionsCount, setMonthlyTransactionsCount] = useState(0);
   const [latestPush, setLatestPush] = useState(null);
   const [recommendation, setRecommendation] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -251,18 +252,62 @@ const DashboardPage = () => {
       try {
         setIsLoading(true);
         
+        // Получаем текущий месяц для фильтрации транзакций
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        
         // Загружаем данные параллельно (Push API может быть недоступен)
-        const [profileData, balanceData, transactionsData, pushData] = await Promise.allSettled([
+        const [profileData, balanceData, transactionsData, monthlyTransactionsData, pushData] = await Promise.allSettled([
           clientAPI.getProfile(),
           clientAPI.getBalance(),
-          transactionsAPI.getTransactions({ limit: 5 }),
+          transactionsAPI.getTransactions({ limit: 5 }), // Последние 5 для отображения
+          transactionsAPI.getTransactions({ 
+            dateFrom: startOfMonth.toISOString().split('T')[0],
+            dateTo: endOfMonth.toISOString().split('T')[0]
+          }), // Все транзакции за месяц для подсчета
           pushAPI.getLatestPush().catch(() => null) // Игнорируем ошибки Push API
         ]);
 
-        setProfile(profileData.status === 'fulfilled' ? profileData.value : null);
-        setBalance(balanceData.status === 'fulfilled' ? balanceData.value : null);
-        setRecentTransactions(transactionsData.status === 'fulfilled' ? (transactionsData.value.transactions || []) : []);
-        setLatestPush(pushData.status === 'fulfilled' ? pushData.value : null);
+        // Обрабатываем данные профиля
+        if (profileData.status === 'fulfilled') {
+          console.log('✅ Профиль загружен:', profileData.value);
+          setProfile(profileData.value);
+        } else {
+          console.error('❌ Ошибка загрузки профиля:', profileData.reason);
+        }
+
+        // Обрабатываем данные баланса
+        if (balanceData.status === 'fulfilled') {
+          console.log('✅ Баланс загружен:', balanceData.value);
+          setBalance(balanceData.value);
+        } else {
+          console.error('❌ Ошибка загрузки баланса:', balanceData.reason);
+        }
+
+        // Обрабатываем последние транзакции
+        if (transactionsData.status === 'fulfilled') {
+          console.log('✅ Последние транзакции загружены:', transactionsData.value);
+          setRecentTransactions(transactionsData.value.transactions || []);
+        } else {
+          console.error('❌ Ошибка загрузки последних транзакций:', transactionsData.reason);
+        }
+
+        // Обрабатываем транзакции за месяц
+        if (monthlyTransactionsData.status === 'fulfilled') {
+          console.log('✅ Транзакции за месяц загружены:', monthlyTransactionsData.value);
+          setMonthlyTransactionsCount((monthlyTransactionsData.value.transactions || []).length);
+        } else {
+          console.error('❌ Ошибка загрузки транзакций за месяц:', monthlyTransactionsData.reason);
+        }
+
+        // Обрабатываем push уведомления
+        if (pushData.status === 'fulfilled') {
+          console.log('✅ Push уведомления загружены:', pushData.value);
+          setLatestPush(pushData.value);
+        } else {
+          console.log('ℹ️ Push уведомления недоступны:', pushData.reason);
+        }
 
         // Загружаем рекомендации если есть код клиента
         if (user?.client_code) {
@@ -315,6 +360,38 @@ const DashboardPage = () => {
     return format(new Date(dateString), 'dd.MM.yyyy', { locale: ru });
   };
 
+  const getTransactionDescription = (transaction) => {
+    // Используем категорию для определения описания
+    if (transaction.category) {
+      const categoryMap = {
+        salary_in: 'Зарплата',
+        stipend_in: 'Стипендия',
+        family_in: 'Перевод от семьи',
+        cashback_in: 'Кэшбэк',
+        refund_in: 'Возврат средств',
+        card_in: 'Пополнение карты',
+        p2p_out: 'Перевод P2P',
+        card_out: 'Оплата картой',
+        atm_withdrawal: 'Снятие в банкомате',
+        utilities_out: 'Оплата коммунальных услуг',
+        loan_payment_out: 'Платеж по кредиту',
+        cc_repayment_out: 'Погашение кредитной карты',
+        installment_payment_out: 'Платеж по рассрочке',
+        fx_buy: 'Покупка валюты',
+        fx_sell: 'Продажа валюты',
+        invest_out: 'Инвестиции',
+        invest_in: 'Доход от инвестиций',
+        deposit_topup_out: 'Пополнение депозита',
+        deposit_fx_topup_out: 'Пополнение валютного депозита',
+        deposit_fx_withdraw_in: 'Снятие с валютного депозита',
+        gold_buy_out: 'Покупка золота',
+        gold_sell_in: 'Продажа золота'
+      };
+      return categoryMap[transaction.category] || transaction.category || 'Транзакция';
+    }
+    return transaction.description || 'Транзакция';
+  };
+
   if (isLoading) {
     return (
       <DashboardContainer>
@@ -329,7 +406,7 @@ const DashboardPage = () => {
     <DashboardContainer>
       <WelcomeSection>
         <WelcomeText>
-          <h1>Добро пожаловать, {user?.name || user?.client_code}!</h1>
+          <h1>Добро пожаловать, {profile?.name || user?.name || user?.client_code}!</h1>
           <p>Управляйте своими финансами с Bank Center Credit</p>
         </WelcomeText>
         <QuickActions>
@@ -345,19 +422,19 @@ const DashboardPage = () => {
       <StatsGrid>
         <StatCard>
           <StatIcon>💰</StatIcon>
-          <StatValue>{formatCurrency(balance?.current_balance || 0)}</StatValue>
+          <StatValue>{formatCurrency(balance?.balance || 0)}</StatValue>
           <StatLabel>Текущий баланс</StatLabel>
         </StatCard>
 
         <StatCard>
           <StatIcon>📊</StatIcon>
-          <StatValue>{formatCurrency(profile?.average_balance || 0)}</StatValue>
+          <StatValue>{formatCurrency(profile?.avgMonthlyBalanceKzt || 0)}</StatValue>
           <StatLabel>Средний баланс</StatLabel>
         </StatCard>
 
         <StatCard>
           <StatIcon>📈</StatIcon>
-          <StatValue>{recentTransactions.length}</StatValue>
+          <StatValue>{monthlyTransactionsCount}</StatValue>
           <StatLabel>Транзакций за месяц</StatLabel>
         </StatCard>
 
@@ -376,10 +453,10 @@ const DashboardPage = () => {
               <TransactionItem key={index}>
                 <TransactionInfo>
                   <TransactionDescription>
-                    {transaction.description || transaction.category || 'Транзакция'}
+                    {getTransactionDescription(transaction)}
                   </TransactionDescription>
                   <TransactionDate>
-                    {formatDate(transaction.date)}
+                    {formatDate(transaction.date || transaction.createdAt)}
                   </TransactionDate>
                 </TransactionInfo>
                 <TransactionAmount positive={transaction.amount > 0}>

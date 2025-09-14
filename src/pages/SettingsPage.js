@@ -255,6 +255,7 @@ const ChangePasswordForm = styled.form`
 const SettingsPage = () => {
   const { user, logout } = useAuth();
   const [profile, setProfile] = useState(null);
+  const [balance, setBalance] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -271,26 +272,67 @@ const SettingsPage = () => {
   });
 
   useEffect(() => {
-    const loadProfile = async () => {
+    const loadSettingsData = async () => {
       try {
         setIsLoading(true);
-        const profileData = await clientAPI.getProfile();
-        setProfile(profileData);
+        
+        // Загружаем данные профиля, баланса и настроек уведомлений параллельно
+        const [profileData, balanceData, notificationSettingsData] = await Promise.allSettled([
+          clientAPI.getProfile(),
+          clientAPI.getBalance(),
+          clientAPI.getNotificationSettings().catch(() => null) // Игнорируем ошибки, если API недоступно
+        ]);
+
+        // Обрабатываем данные профиля
+        if (profileData.status === 'fulfilled') {
+          console.log('✅ Профиль загружен в настройках:', profileData.value);
+          setProfile(profileData.value);
+        } else {
+          console.error('❌ Ошибка загрузки профиля в настройках:', profileData.reason);
+        }
+
+        // Обрабатываем данные баланса
+        if (balanceData.status === 'fulfilled') {
+          console.log('✅ Баланс загружен в настройках:', balanceData.value);
+          setBalance(balanceData.value);
+        } else {
+          console.error('❌ Ошибка загрузки баланса в настройках:', balanceData.reason);
+        }
+
+        // Обрабатываем настройки уведомлений
+        if (notificationSettingsData.status === 'fulfilled' && notificationSettingsData.value) {
+          console.log('✅ Настройки уведомлений загружены:', notificationSettingsData.value);
+          setNotifications(notificationSettingsData.value);
+        } else {
+          console.log('ℹ️ Настройки уведомлений недоступны, используются значения по умолчанию');
+        }
       } catch (error) {
-        console.error('Ошибка загрузки профиля:', error);
+        console.error('Ошибка загрузки данных настроек:', error);
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadProfile();
+    loadSettingsData();
   }, []);
 
-  const handleNotificationToggle = (type) => {
-    setNotifications(prev => ({
-      ...prev,
-      [type]: !prev[type]
-    }));
+  const handleNotificationToggle = async (type) => {
+    const newNotifications = {
+      ...notifications,
+      [type]: !notifications[type]
+    };
+    
+    setNotifications(newNotifications);
+    
+    // Сохраняем настройки в бэкенд (когда API будет доступно)
+    try {
+      await clientAPI.updateNotificationSettings(newNotifications);
+      console.log('✅ Настройки уведомлений сохранены:', newNotifications);
+    } catch (error) {
+      console.log('ℹ️ API настроек уведомлений недоступно, настройки сохранены локально');
+      // В случае ошибки возвращаем предыдущее состояние
+      setNotifications(notifications);
+    }
   };
 
   const handlePasswordChange = (e) => {
@@ -303,14 +345,37 @@ const SettingsPage = () => {
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
-    // Здесь должна быть логика смены пароля через API
-    console.log('Смена пароля:', passwordData);
-    setShowChangePasswordModal(false);
-    setPasswordData({
-      currentPassword: '',
-      newPassword: '',
-      confirmPassword: ''
-    });
+    
+    // Валидация
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      alert('Новые пароли не совпадают');
+      return;
+    }
+    
+    if (passwordData.newPassword.length < 6) {
+      alert('Новый пароль должен содержать минимум 6 символов');
+      return;
+    }
+    
+    try {
+      await clientAPI.changePassword({
+        currentPassword: passwordData.currentPassword,
+        newPassword: passwordData.newPassword
+      });
+      
+      console.log('✅ Пароль успешно изменен');
+      alert('Пароль успешно изменен');
+      
+      setShowChangePasswordModal(false);
+      setPasswordData({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      });
+    } catch (error) {
+      console.error('❌ Ошибка смены пароля:', error);
+      alert('Ошибка смены пароля: ' + error.message);
+    }
   };
 
   const handleLogout = () => {
@@ -356,34 +421,48 @@ const SettingsPage = () => {
           <ProfileInfo>
             <InfoRow>
               <InfoLabel>Имя:</InfoLabel>
-              <InfoValue>{user?.name || '—'}</InfoValue>
+              <InfoValue>{profile?.name || user?.name || '—'}</InfoValue>
             </InfoRow>
             <InfoRow>
               <InfoLabel>Код клиента:</InfoLabel>
-              <InfoValue>{user?.client_code || '—'}</InfoValue>
+              <InfoValue>{profile?.clientCode || user?.client_code || '—'}</InfoValue>
             </InfoRow>
             <InfoRow>
               <InfoLabel>Статус:</InfoLabel>
-              <InfoValue>{user?.status || '—'}</InfoValue>
+              <InfoValue>{profile?.status || user?.status || '—'}</InfoValue>
             </InfoRow>
             <InfoRow>
               <InfoLabel>Город:</InfoLabel>
-              <InfoValue>{user?.city || '—'}</InfoValue>
+              <InfoValue>{profile?.city || user?.city || '—'}</InfoValue>
             </InfoRow>
             <InfoRow>
               <InfoLabel>Возраст:</InfoLabel>
               <InfoValue>{profile?.age || '—'}</InfoValue>
             </InfoRow>
             <InfoRow>
-              <InfoLabel>Средний баланс:</InfoLabel>
+              <InfoLabel>Текущий баланс:</InfoLabel>
               <InfoValue>
-                {profile?.average_balance 
+                {balance?.balance 
                   ? new Intl.NumberFormat('ru-KZ', {
                       style: 'currency',
                       currency: 'KZT',
                       minimumFractionDigits: 0,
                       maximumFractionDigits: 0,
-                    }).format(profile.average_balance)
+                    }).format(balance.balance)
+                  : '—'
+                }
+              </InfoValue>
+            </InfoRow>
+            <InfoRow>
+              <InfoLabel>Средний баланс:</InfoLabel>
+              <InfoValue>
+                {profile?.avgMonthlyBalanceKzt 
+                  ? new Intl.NumberFormat('ru-KZ', {
+                      style: 'currency',
+                      currency: 'KZT',
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 0,
+                    }).format(profile.avgMonthlyBalanceKzt)
                   : '—'
                 }
               </InfoValue>

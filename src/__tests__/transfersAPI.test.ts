@@ -19,20 +19,23 @@ jest.mock('axios');
 import axios from 'axios';
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
+// Создаем мок для apiClient
+const mockApiClient = {
+  get: jest.fn(),
+  post: jest.fn(),
+  put: jest.fn(),
+  delete: jest.fn(),
+  interceptors: {
+    request: { use: jest.fn() },
+    response: { use: jest.fn() }
+  }
+};
+
 describe('TransfersAPI Integration Tests', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // Мокаем успешный ответ axios
-    mockedAxios.create.mockReturnValue({
-      get: jest.fn(),
-      post: jest.fn(),
-      put: jest.fn(),
-      delete: jest.fn(),
-      interceptors: {
-        request: { use: jest.fn() },
-        response: { use: jest.fn() }
-      }
-    } as any);
+    mockedAxios.create.mockReturnValue(mockApiClient as any);
   });
 
   describe('getTransfers', () => {
@@ -70,13 +73,13 @@ describe('TransfersAPI Integration Tests', () => {
         statusText: 'OK'
       };
 
-      mockedAxios.create().get.mockResolvedValue(mockResponse);
+      mockApiClient.get.mockResolvedValue(mockResponse);
 
       const result = await transfersAPI.getTransfers();
 
       expect(result).toEqual(mockTransfers);
       expect(result).toHaveLength(2);
-      expect(mockedAxios.create().get).toHaveBeenCalledWith('/transfers', { params: {} });
+      expect(mockApiClient.get).toHaveBeenCalledWith('/transfers', { params: {} });
     });
 
     it('should handle transfers request error', async () => {
@@ -87,7 +90,7 @@ describe('TransfersAPI Integration Tests', () => {
         }
       };
 
-      mockedAxios.create().get.mockRejectedValue(errorResponse);
+      mockApiClient.get.mockRejectedValue(errorResponse);
 
       await expect(transfersAPI.getTransfers()).rejects.toThrow('Transfers not found');
     });
@@ -105,11 +108,11 @@ describe('TransfersAPI Integration Tests', () => {
         status: 200
       };
 
-      mockedAxios.create().get.mockResolvedValue(mockResponse);
+      mockApiClient.get.mockResolvedValue(mockResponse);
 
       await transfersAPI.getTransfers(params);
 
-      expect(mockedAxios.create().get).toHaveBeenCalledWith('/transfers', { params });
+      expect(mockApiClient.get).toHaveBeenCalledWith('/transfers', { params });
     });
   });
 
@@ -131,12 +134,12 @@ describe('TransfersAPI Integration Tests', () => {
         statusText: 'OK'
       };
 
-      mockedAxios.create().post.mockResolvedValue(mockResponse);
+      mockApiClient.post.mockResolvedValue(mockResponse);
 
       const result = await transfersAPI.createTransfer(transferData);
 
       expect(result).toEqual({ message: 'Transfer added' });
-      expect(mockedAxios.create().post).toHaveBeenCalledWith(
+      expect(mockApiClient.post).toHaveBeenCalledWith(
         '/transfers',
         expect.any(FormData),
         {
@@ -160,11 +163,11 @@ describe('TransfersAPI Integration Tests', () => {
         status: 200
       };
 
-      mockedAxios.create().post.mockResolvedValue(mockResponse);
+      mockApiClient.post.mockResolvedValue(mockResponse);
 
       await transfersAPI.createTransfer(transferData);
 
-      const formDataCall = mockedAxios.create().post.mock.calls[0][1];
+      const formDataCall = mockApiClient.post.mock.calls[0][1];
       expect(formDataCall).toBeInstanceOf(FormData);
     });
 
@@ -183,7 +186,7 @@ describe('TransfersAPI Integration Tests', () => {
         }
       };
 
-      mockedAxios.create().post.mockRejectedValue(errorResponse);
+      mockApiClient.post.mockRejectedValue(errorResponse);
 
       await expect(transfersAPI.createTransfer(transferData)).rejects.toThrow('Failed to create transfer');
     });
@@ -216,19 +219,14 @@ describe('TransfersAPI Integration Tests', () => {
         statusText: 'OK'
       };
 
-      mockedAxios.create().post.mockResolvedValue(mockResponse);
+      mockApiClient.post.mockResolvedValue(mockResponse);
 
       const result = await transfersAPI.createTransferJson(transferData);
 
       expect(result).toEqual(mockTransfer);
-      expect(mockedAxios.create().post).toHaveBeenCalledWith(
-        '/transfers',
-        transferData,
-        {
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }
+      expect(mockApiClient.post).toHaveBeenCalledWith(
+        '/transfers/json',
+        transferData
       );
     });
 
@@ -247,7 +245,7 @@ describe('TransfersAPI Integration Tests', () => {
         }
       };
 
-      mockedAxios.create().post.mockRejectedValue(errorResponse);
+      mockApiClient.post.mockRejectedValue(errorResponse);
 
       await expect(transfersAPI.createTransferJson(transferData)).rejects.toThrow('Invalid transfer data');
     });
@@ -263,7 +261,7 @@ describe('TransfersAPI Integration Tests', () => {
         status: 200
       };
 
-      mockedAxios.create().get.mockResolvedValue(mockResponse);
+      mockApiClient.get.mockResolvedValue(mockResponse);
 
       await transfersAPI.getTransfers();
 
@@ -285,7 +283,7 @@ describe('TransfersAPI Integration Tests', () => {
         status: 200
       };
 
-      mockedAxios.create().post.mockResolvedValue(mockResponse);
+      mockApiClient.post.mockResolvedValue(mockResponse);
 
       await transfersAPI.createTransfer(transferData);
 

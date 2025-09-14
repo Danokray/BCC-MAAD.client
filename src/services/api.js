@@ -150,6 +150,46 @@ export const clientAPI = {
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Ошибка получения баланса');
     }
+  },
+
+  // Обновление профиля (когда будет доступно в бэкенде)
+  updateProfile: async (profileData) => {
+    try {
+      const response = await apiClient.put('/client/profile', profileData);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Ошибка обновления профиля');
+    }
+  },
+
+  // Получение настроек уведомлений (когда будет доступно в бэкенде)
+  getNotificationSettings: async () => {
+    try {
+      const response = await apiClient.get('/client/notifications');
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Ошибка получения настроек уведомлений');
+    }
+  },
+
+  // Обновление настроек уведомлений (когда будет доступно в бэкенде)
+  updateNotificationSettings: async (settings) => {
+    try {
+      const response = await apiClient.put('/client/notifications', settings);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Ошибка обновления настроек уведомлений');
+    }
+  },
+
+  // Смена пароля (когда будет доступно в бэкенде)
+  changePassword: async (passwordData) => {
+    try {
+      const response = await apiClient.put('/client/password', passwordData);
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Ошибка смены пароля');
+    }
   }
 };
 

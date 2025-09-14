@@ -45,6 +45,16 @@ const FiltersGrid = styled.div`
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: ${theme.spacing.md};
   align-items: end;
+
+  @media (max-width: ${theme.breakpoints.md}) {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: ${theme.spacing.sm};
+  }
+
+  @media (max-width: ${theme.breakpoints.sm}) {
+    grid-template-columns: 1fr;
+    gap: ${theme.spacing.sm};
+  }
 `;
 
 const FilterActions = styled.div`
@@ -150,16 +160,7 @@ const AddTransactionForm = styled.form`
   gap: ${theme.spacing.lg};
 `;
 
-const FormRow = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: ${theme.spacing.md};
-
-  @media (max-width: ${theme.breakpoints.sm}) {
-    grid-template-columns: 1fr;
-  }
-`;
-
+// Стили для пагинации
 const PaginationContainer = styled.div`
   display: flex;
   justify-content: center;
@@ -167,52 +168,56 @@ const PaginationContainer = styled.div`
   gap: ${theme.spacing.sm};
   margin-top: ${theme.spacing.lg};
   padding: ${theme.spacing.md} 0;
+  flex-wrap: wrap;
+
+  @media (max-width: ${theme.breakpoints.sm}) {
+    gap: ${theme.spacing.xs};
+    padding: ${theme.spacing.sm} 0;
+  }
 `;
 
 const PaginationButton = styled.button`
   padding: ${theme.spacing.sm} ${theme.spacing.md};
   border: 1px solid ${theme.colors.gray300};
-  border-radius: ${theme.borderRadius.lg};
-  background-color: ${props => props.active ? theme.colors.primary : theme.colors.white};
+  background: ${props => props.active ? theme.colors.primary : theme.colors.white};
   color: ${props => props.active ? theme.colors.white : theme.colors.textPrimary};
+  border-radius: ${theme.borderRadius.md};
   font-size: ${theme.typography.fontSize.sm};
   font-weight: ${theme.typography.fontWeight.medium};
   cursor: pointer;
   transition: all 0.2s ease;
   min-width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 
-  &:hover {
-    background-color: ${props => props.active ? theme.colors.primary : theme.colors.gray50};
-    border-color: ${theme.colors.primary};
+  &:hover:not(:disabled) {
+    background: ${props => props.active ? theme.colors.primary : theme.colors.gray50};
+    border-color: ${props => props.active ? theme.colors.primary : theme.colors.gray400};
+    transform: translateY(-1px);
   }
 
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  @media (max-width: ${theme.breakpoints.sm}) {
+    padding: ${theme.spacing.xs} ${theme.spacing.sm};
+    min-width: 36px;
+    height: 36px;
+    font-size: ${theme.typography.fontSize.xs};
   }
 `;
 
-const SmallPaginationButton = styled.button`
-  padding: ${theme.spacing.xs} ${theme.spacing.sm};
-  border: 1px solid ${theme.colors.gray300};
-  border-radius: ${theme.borderRadius.md};
-  background-color: ${theme.colors.white};
-  color: ${theme.colors.textPrimary};
-  font-size: ${theme.typography.fontSize.xs};
-  font-weight: ${theme.typography.fontWeight.medium};
-  cursor: pointer;
-  transition: all 0.2s ease;
-  min-width: 32px;
-  height: 32px;
+const SmallPaginationButton = styled(PaginationButton)`
+  padding: ${theme.spacing.sm};
+  min-width: 40px;
 
-  &:hover {
-    background-color: ${theme.colors.gray50};
-    border-color: ${theme.colors.primary};
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  @media (max-width: ${theme.breakpoints.sm}) {
+    padding: ${theme.spacing.xs};
+    min-width: 36px;
   }
 `;
 
@@ -220,14 +225,46 @@ const PaginationDots = styled.span`
   padding: ${theme.spacing.sm} ${theme.spacing.xs};
   color: ${theme.colors.textSecondary};
   font-size: ${theme.typography.fontSize.sm};
-  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  height: 40px;
+
+  @media (max-width: ${theme.breakpoints.sm}) {
+    min-width: 36px;
+    height: 36px;
+    font-size: ${theme.typography.fontSize.xs};
+  }
 `;
 
 const PaginationInfo = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${theme.spacing.sm};
   font-size: ${theme.typography.fontSize.sm};
   color: ${theme.colors.textSecondary};
-  margin: 0 ${theme.spacing.md};
+  margin-top: ${theme.spacing.md};
+
+  @media (max-width: ${theme.breakpoints.sm}) {
+    font-size: ${theme.typography.fontSize.xs};
+    flex-direction: column;
+    gap: ${theme.spacing.xs};
+    text-align: center;
+  }
 `;
+
+const FormRow = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: ${theme.spacing.md};
+
+  @media (max-width: ${theme.breakpoints.sm}) {
+    grid-template-columns: 1fr;
+    gap: ${theme.spacing.sm};
+  }
+`;
+
 
 const TransactionsPage = () => {
   const [transactions, setTransactions] = useState([]);
@@ -252,6 +289,36 @@ const TransactionsPage = () => {
   // Пагинация
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
+
+  // Функция для маппинга старых категорий на новые
+  const mapOldCategoryToNew = (oldCategory) => {
+    if (!oldCategory) return null;
+    
+    const categoryMapping = {
+      // Старые категории -> новые
+      'food': 'food',
+      'transport': 'taxi',
+      'shopping': 'clothing',
+      'entertainment': 'entertainment',
+      'utilities': 'home_repair',
+      'healthcare': 'medicine',
+      'education': 'books',
+      'salary': 'other',
+      'other': 'other',
+      // Возможные русские названия
+      'Питание': 'food',
+      'Транспорт': 'taxi',
+      'Покупки': 'clothing',
+      'Развлечения': 'entertainment',
+      'Коммунальные услуги': 'home_repair',
+      'Здравоохранение': 'medicine',
+      'Образование': 'books',
+      'Зарплата': 'other',
+      'Другое': 'other'
+    };
+    
+    return categoryMapping[oldCategory] || oldCategory;
+  };
 
   const loadTransactions = useCallback(async () => {
     try {
@@ -279,7 +346,8 @@ const TransactionsPage = () => {
           : 'KZT',
         status: transaction.status || 'completed',
         clientCode: transaction.clientCode || transaction.client_code || '—',
-        amount: typeof transaction.amount === 'number' ? transaction.amount : parseFloat(transaction.amount) || 0
+        amount: typeof transaction.amount === 'number' ? transaction.amount : parseFloat(transaction.amount) || 0,
+        category: mapOldCategoryToNew(transaction.category) || 'other' // Убеждаемся, что категория есть
       }));
       
       console.log('✅ Финальные данные транзакций:', transactionsData);
@@ -381,14 +449,30 @@ const TransactionsPage = () => {
 
   const getCategoryText = (category) => {
     const categories = {
-      food: 'Питание',
-      transport: 'Транспорт',
-      shopping: 'Покупки',
+      clothing: 'Одежда и обувь',
+      food: 'Продукты питания',
+      cafe: 'Кафе и рестораны',
+      medicine: 'Медицина',
+      auto: 'Авто',
+      sport: 'Спорт',
       entertainment: 'Развлечения',
-      utilities: 'Коммунальные услуги',
-      healthcare: 'Здравоохранение',
-      education: 'Образование',
-      salary: 'Зарплата',
+      gas_station: 'АЗС',
+      cinema: 'Кино',
+      pets: 'Питомцы',
+      books: 'Книги',
+      flowers: 'Цветы',
+      eat_home: 'Едим дома',
+      watch_home: 'Смотрим дома',
+      play_home: 'Играем дома',
+      cosmetics: 'Косметика и Парфюмерия',
+      gifts: 'Подарки',
+      home_repair: 'Ремонт дома',
+      furniture: 'Мебель',
+      spa: 'Спа и массаж',
+      jewelry: 'Ювелирные украшения',
+      taxi: 'Такси',
+      hotels: 'Отели',
+      travel: 'Путешествия',
       other: 'Другое'
     };
     return categories[category] || category || '—';
@@ -399,13 +483,30 @@ const TransactionsPage = () => {
       return 'Зарплата';
     } else {
       const categoryDescriptions = {
-        food: 'Покупка в супермаркете',
-        transport: 'Оплата проезда',
-        shopping: 'Покупка товаров',
+        clothing: 'Покупка одежды и обуви',
+        food: 'Покупка продуктов питания',
+        cafe: 'Кафе и рестораны',
+        medicine: 'Медицинские услуги',
+        auto: 'Автомобильные расходы',
+        sport: 'Спортивные товары и услуги',
         entertainment: 'Развлечения',
-        utilities: 'Коммунальные услуги',
-        healthcare: 'Медицинские услуги',
-        education: 'Образование',
+        gas_station: 'Заправка автомобиля',
+        cinema: 'Посещение кинотеатра',
+        pets: 'Товары для питомцев',
+        books: 'Покупка книг',
+        flowers: 'Покупка цветов',
+        eat_home: 'Питание дома',
+        watch_home: 'Домашний досуг',
+        play_home: 'Домашние игры',
+        cosmetics: 'Косметика и парфюмерия',
+        gifts: 'Покупка подарков',
+        home_repair: 'Ремонт дома',
+        furniture: 'Покупка мебели',
+        spa: 'Спа и массаж',
+        jewelry: 'Ювелирные украшения',
+        taxi: 'Поездка на такси',
+        hotels: 'Проживание в отеле',
+        travel: 'Путешествия',
         other: 'Прочие расходы'
       };
       return categoryDescriptions[transaction.category] || 'Транзакция';
@@ -425,7 +526,13 @@ const TransactionsPage = () => {
     }
 
     if (filters.category) {
-      filtered = filtered.filter(transaction => transaction.category === filters.category);
+      filtered = filtered.filter(transaction => {
+        // Проверяем точное совпадение
+        const exactMatch = transaction.category === filters.category;
+        // Проверяем совпадение по названию категории
+        const nameMatch = getCategoryText(transaction.category) === getCategoryText(filters.category);
+        return exactMatch || nameMatch;
+      });
     }
 
     if (filters.dateFrom) {
@@ -524,14 +631,30 @@ const TransactionsPage = () => {
   };
 
   const categories = [
-    { value: 'food', label: 'Питание' },
-    { value: 'transport', label: 'Транспорт' },
-    { value: 'shopping', label: 'Покупки' },
+    { value: 'clothing', label: 'Одежда и обувь' },
+    { value: 'food', label: 'Продукты питания' },
+    { value: 'cafe', label: 'Кафе и рестораны' },
+    { value: 'medicine', label: 'Медицина' },
+    { value: 'auto', label: 'Авто' },
+    { value: 'sport', label: 'Спорт' },
     { value: 'entertainment', label: 'Развлечения' },
-    { value: 'utilities', label: 'Коммунальные услуги' },
-    { value: 'healthcare', label: 'Здравоохранение' },
-    { value: 'education', label: 'Образование' },
-    { value: 'salary', label: 'Зарплата' },
+    { value: 'gas_station', label: 'АЗС' },
+    { value: 'cinema', label: 'Кино' },
+    { value: 'pets', label: 'Питомцы' },
+    { value: 'books', label: 'Книги' },
+    { value: 'flowers', label: 'Цветы' },
+    { value: 'eat_home', label: 'Едим дома' },
+    { value: 'watch_home', label: 'Смотрим дома' },
+    { value: 'play_home', label: 'Играем дома' },
+    { value: 'cosmetics', label: 'Косметика и Парфюмерия' },
+    { value: 'gifts', label: 'Подарки' },
+    { value: 'home_repair', label: 'Ремонт дома' },
+    { value: 'furniture', label: 'Мебель' },
+    { value: 'spa', label: 'Спа и массаж' },
+    { value: 'jewelry', label: 'Ювелирные украшения' },
+    { value: 'taxi', label: 'Такси' },
+    { value: 'hotels', label: 'Отели' },
+    { value: 'travel', label: 'Путешествия' },
     { value: 'other', label: 'Другое' }
   ];
 
@@ -645,9 +768,9 @@ const TransactionsPage = () => {
             <Table.Header>
               <Table.Row>
                 <Table.HeaderCell>Дата</Table.HeaderCell>
-                <Table.HeaderCell>Описание</Table.HeaderCell>
+                <Table.HeaderCell>Источник</Table.HeaderCell>
                 <Table.HeaderCell>Категория</Table.HeaderCell>
-                <Table.HeaderCell align="right">Сумма</Table.HeaderCell>
+                <Table.HeaderCell>Сумма</Table.HeaderCell>
                 <Table.HeaderCell>Статус</Table.HeaderCell>
               </Table.Row>
             </Table.Header>
@@ -662,7 +785,7 @@ const TransactionsPage = () => {
                     <Table.Cell>{formatDate(transaction.date || transaction.createdAt || new Date())}</Table.Cell>
                     <Table.Cell>{getDescription(transaction)}</Table.Cell>
                     <Table.Cell>{getCategoryText(transaction.category)}</Table.Cell>
-                    <Table.Cell align="right" numeric>
+                    <Table.Cell>
                       <TransactionAmount positive={transaction.amount > 0}>
                         {transaction.amount > 0 ? '+' : ''}{formatCurrency(transaction.amount, transaction.currency || 'KZT')}
                       </TransactionAmount>
@@ -726,11 +849,19 @@ const TransactionsPage = () => {
             >
               →
             </SmallPaginationButton>
-            
-            <PaginationInfo>
-              Показано {startIndex + 1}-{Math.min(endIndex, filteredTransactions.length)} из {filteredTransactions.length}
-            </PaginationInfo>
           </PaginationContainer>
+        )}
+        
+        {/* Информация о пагинации */}
+        {filteredTransactions.length > 0 && (
+          <PaginationInfo>
+            <span>
+              Показано {startIndex + 1}-{Math.min(endIndex, filteredTransactions.length)} из {filteredTransactions.length} транзакций
+            </span>
+            <span>
+              Страница {currentPage} из {totalPages}
+            </span>
+          </PaginationInfo>
         )}
       </TransactionsTable>
 
