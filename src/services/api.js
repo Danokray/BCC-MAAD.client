@@ -4,7 +4,7 @@ import axios from 'axios';
 const getApiConfig = () => {
   const configs = {
     development: {
-      baseURL: process.env.REACT_APP_API_URL,
+      baseURL: '', // Используем прокси из package.json
       timeout: 10000,
     },
     production: {
@@ -189,6 +189,16 @@ export const clientAPI = {
       return response.data;
     } catch (error) {
       throw new Error(error.response?.data?.message || 'Ошибка смены пароля');
+    }
+  },
+
+  // Анализ клиента
+  analyze: async () => {
+    try {
+      const response = await apiClient.post('/clientAnalyze/analyze');
+      return response.data;
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Ошибка анализа клиента');
     }
   }
 };

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { useAuth } from '../contexts/AuthContext';
 import { clientAPI, pushAPI } from '../services/api';
+import { useToast } from '../components/ui/Toast';
 import { theme } from '../styles/theme';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -97,6 +98,20 @@ const NotificationItem = styled.div`
   }
 `;
 
+const ToggleContainer = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${theme.spacing.sm};
+`;
+
+const ToggleStatus = styled.span`
+  font-size: ${theme.typography.fontSize.xs};
+  color: ${props => props.enabled ? theme.colors.success : theme.colors.textMuted};
+  font-weight: ${theme.typography.fontWeight.medium};
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+`;
+
 const NotificationInfo = styled.div`
   display: flex;
   flex-direction: column;
@@ -128,23 +143,31 @@ const ToggleInput = styled.input`
 
   &:checked + span {
     background-color: ${theme.colors.primary};
+    border-color: ${theme.colors.primary};
   }
 
   &:checked + span:before {
     transform: translateX(24px);
   }
+
+  &:disabled + span {
+    opacity: 0.8;
+    cursor: not-allowed;
+  }
 `;
 
 const ToggleSlider = styled.span`
   position: absolute;
-  cursor: pointer;
+  cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'};
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: ${theme.colors.gray300};
+  background-color: ${props => props.disabled ? theme.colors.gray300 : theme.colors.gray300};
   transition: 0.2s;
   border-radius: 24px;
+  opacity: ${props => props.disabled ? 0.8 : 1};
+  border: 1px solid ${props => props.disabled ? theme.colors.gray400 : 'transparent'};
 
   &:before {
     position: absolute;
@@ -156,6 +179,7 @@ const ToggleSlider = styled.span`
     background-color: white;
     transition: 0.2s;
     border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   }
 `;
 
@@ -254,6 +278,7 @@ const ChangePasswordForm = styled.form`
 
 const SettingsPage = () => {
   const { user, logout } = useAuth();
+  const { addToast } = useToast();
   const [profile, setProfile] = useState(null);
   const [balance, setBalance] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -270,6 +295,8 @@ const SettingsPage = () => {
     newPassword: '',
     confirmPassword: ''
   });
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [updatingNotifications, setUpdatingNotifications] = useState(false);
 
   useEffect(() => {
     const loadSettingsData = async () => {
@@ -317,21 +344,54 @@ const SettingsPage = () => {
   }, []);
 
   const handleNotificationToggle = async (type) => {
+    // Предотвращаем множественные клики во время обновления
+    if (updatingNotifications) return;
+    
     const newNotifications = {
       ...notifications,
       [type]: !notifications[type]
     };
     
+    // Сразу обновляем состояние UI
     setNotifications(newNotifications);
+    setUpdatingNotifications(true);
+    
+    // Показываем уведомление о изменении настройки
+    const settingNames = {
+      push: 'Push-уведомления',
+      email: 'Email-уведомления',
+      sms: 'SMS-уведомления',
+      security: 'Уведомления безопасности'
+    };
+    
+    addToast({
+      type: 'info',
+      title: 'Настройка изменена',
+      message: `${settingNames[type]} ${newNotifications[type] ? 'включены' : 'отключены'}`,
+      duration: 3000
+    });
     
     // Сохраняем настройки в бэкенд (когда API будет доступно)
     try {
       await clientAPI.updateNotificationSettings(newNotifications);
       console.log('✅ Настройки уведомлений сохранены:', newNotifications);
+      addToast({
+        type: 'success',
+        title: 'Настройки сохранены',
+        message: 'Настройки уведомлений успешно обновлены',
+        duration: 3000
+      });
     } catch (error) {
       console.log('ℹ️ API настроек уведомлений недоступно, настройки сохранены локально');
-      // В случае ошибки возвращаем предыдущее состояние
-      setNotifications(notifications);
+      // НЕ возвращаем предыдущее состояние - оставляем новое состояние
+      addToast({
+        type: 'warning',
+        title: 'Настройки сохранены локально',
+        message: 'Настройки применены, но не синхронизированы с сервером',
+        duration: 4000
+      });
+    } finally {
+      setUpdatingNotifications(false);
     }
   };
 
@@ -348,12 +408,22 @@ const SettingsPage = () => {
     
     // Валидация
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      alert('Новые пароли не совпадают');
+      addToast({
+        type: 'error',
+        title: 'Ошибка валидации',
+        message: 'Новые пароли не совпадают',
+        duration: 5000
+      });
       return;
     }
     
     if (passwordData.newPassword.length < 6) {
-      alert('Новый пароль должен содержать минимум 6 символов');
+      addToast({
+        type: 'error',
+        title: 'Ошибка валидации',
+        message: 'Новый пароль должен содержать минимум 6 символов',
+        duration: 5000
+      });
       return;
     }
     
@@ -364,7 +434,12 @@ const SettingsPage = () => {
       });
       
       console.log('✅ Пароль успешно изменен');
-      alert('Пароль успешно изменен');
+      addToast({
+        type: 'success',
+        title: 'Пароль изменен',
+        message: 'Пароль успешно обновлен',
+        duration: 5000
+      });
       
       setShowChangePasswordModal(false);
       setPasswordData({
@@ -374,7 +449,12 @@ const SettingsPage = () => {
       });
     } catch (error) {
       console.error('❌ Ошибка смены пароля:', error);
-      alert('Ошибка смены пароля: ' + error.message);
+      addToast({
+        type: 'error',
+        title: 'Ошибка смены пароля',
+        message: error.message || 'Произошла ошибка при смене пароля',
+        duration: 6000
+      });
     }
   };
 
@@ -382,8 +462,61 @@ const SettingsPage = () => {
     logout();
   };
 
+  const handleDemoToasts = () => {
+    // Демонстрация разных типов Toast уведомлений
+    addToast({
+      type: 'success',
+      title: 'Успех!',
+      message: 'Операция выполнена успешно',
+      duration: 4000
+    });
+    
+    setTimeout(() => {
+      addToast({
+        type: 'info',
+        title: 'Информация',
+        message: 'Это информационное сообщение',
+        duration: 4000
+      });
+    }, 500);
+    
+    setTimeout(() => {
+      addToast({
+        type: 'warning',
+        title: 'Предупреждение',
+        message: 'Обратите внимание на это предупреждение',
+        duration: 4000
+      });
+    }, 1000);
+    
+    setTimeout(() => {
+      addToast({
+        type: 'error',
+        title: 'Ошибка',
+        message: 'Произошла ошибка при выполнении операции',
+        duration: 4000
+      });
+    }, 1500);
+    
+    setTimeout(() => {
+      addToast({
+        type: 'recommendation',
+        title: 'Персональная рекомендация',
+        message: 'Айгерим, в сентябре у вас 5 поездок на такси на 50 000 ₸. С тревел-картой вернули бы 2 000 ₸ кешбэком. Хотите оформить?',
+        duration: 8000
+      });
+    }, 2000);
+  };
+
   const handleDownloadData = async () => {
     try {
+      addToast({
+        type: 'info',
+        title: 'Скачивание данных',
+        message: 'Подготовка файла для скачивания...',
+        duration: 3000
+      });
+      
       const csvData = await pushAPI.downloadPushes();
       const blob = new Blob([csvData], { type: 'text/csv' });
       const url = window.URL.createObjectURL(blob);
@@ -394,8 +527,79 @@ const SettingsPage = () => {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
+      
+      addToast({
+        type: 'success',
+        title: 'Файл скачан',
+        message: 'Данные успешно экспортированы в CSV файл',
+        duration: 5000
+      });
     } catch (error) {
       console.error('Ошибка скачивания данных:', error);
+      addToast({
+        type: 'error',
+        title: 'Ошибка скачивания',
+        message: error.message || 'Произошла ошибка при скачивании данных',
+        duration: 6000
+      });
+    }
+  };
+
+  const handleAnalyze = async () => {
+    try {
+      setIsAnalyzing(true);
+      console.log('🔄 Запуск анализа клиента...');
+      
+      // Показываем уведомление о начале анализа
+      addToast({
+        type: 'info',
+        title: 'Анализ запущен',
+        message: 'Выполняется анализ данных клиента...',
+        duration: 3000
+      });
+      
+      const result = await clientAPI.analyze();
+      console.log('✅ Результат анализа:', result);
+      
+      // Извлекаем текст push_notification из ответа
+      let notificationText = 'Анализ данных клиента успешно завершен!';
+      
+      if (result) {
+        // Если результат - это строка (push_notification)
+        if (typeof result === 'string') {
+          notificationText = result;
+        }
+        // Если результат - это объект с полем push_notification
+        else if (result.push_notification) {
+          notificationText = result.push_notification;
+        }
+        // Если результат - это объект с другими полями
+        else if (typeof result === 'object') {
+          notificationText = JSON.stringify(result, null, 2);
+        }
+      }
+      
+      // Показываем успешное уведомление с результатом
+      addToast({
+        type: 'recommendation',
+        title: 'Персональная рекомендация',
+        message: notificationText,
+        duration: 12000 // Увеличиваем время для чтения длинного текста
+      });
+      
+    } catch (error) {
+      console.error('❌ Ошибка анализа:', error);
+      
+      // Показываем уведомление об ошибке
+      addToast({
+        type: 'error',
+        title: 'Ошибка анализа',
+        message: error.message || 'Произошла ошибка при выполнении анализа',
+        duration: 8000
+      });
+      
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -479,14 +683,20 @@ const SettingsPage = () => {
                 Получать уведомления в браузере
               </NotificationDescription>
             </NotificationInfo>
-            <ToggleSwitch>
-              <ToggleInput
-                type="checkbox"
-                checked={notifications.push}
-                onChange={() => handleNotificationToggle('push')}
-              />
-              <ToggleSlider />
-            </ToggleSwitch>
+            <ToggleContainer>
+              <ToggleSwitch>
+                <ToggleInput
+                  type="checkbox"
+                  checked={notifications.push}
+                  onChange={() => handleNotificationToggle('push')}
+                  disabled={updatingNotifications}
+                />
+                <ToggleSlider disabled={updatingNotifications} />
+              </ToggleSwitch>
+              <ToggleStatus enabled={notifications.push}>
+                {notifications.push ? 'ВКЛ' : 'ВЫКЛ'}
+              </ToggleStatus>
+            </ToggleContainer>
           </NotificationItem>
 
           <NotificationItem>
@@ -496,14 +706,20 @@ const SettingsPage = () => {
                 Получать уведомления на email
               </NotificationDescription>
             </NotificationInfo>
-            <ToggleSwitch>
-              <ToggleInput
-                type="checkbox"
-                checked={notifications.email}
-                onChange={() => handleNotificationToggle('email')}
-              />
-              <ToggleSlider />
-            </ToggleSwitch>
+            <ToggleContainer>
+              <ToggleSwitch>
+                <ToggleInput
+                  type="checkbox"
+                  checked={notifications.email}
+                  onChange={() => handleNotificationToggle('email')}
+                  disabled={updatingNotifications}
+                />
+                <ToggleSlider disabled={updatingNotifications} />
+              </ToggleSwitch>
+              <ToggleStatus enabled={notifications.email}>
+                {notifications.email ? 'ВКЛ' : 'ВЫКЛ'}
+              </ToggleStatus>
+            </ToggleContainer>
           </NotificationItem>
 
           <NotificationItem>
@@ -513,14 +729,20 @@ const SettingsPage = () => {
                 Получать уведомления по SMS
               </NotificationDescription>
             </NotificationInfo>
-            <ToggleSwitch>
-              <ToggleInput
-                type="checkbox"
-                checked={notifications.sms}
-                onChange={() => handleNotificationToggle('sms')}
-              />
-              <ToggleSlider />
-            </ToggleSwitch>
+            <ToggleContainer>
+              <ToggleSwitch>
+                <ToggleInput
+                  type="checkbox"
+                  checked={notifications.sms}
+                  onChange={() => handleNotificationToggle('sms')}
+                  disabled={updatingNotifications}
+                />
+                <ToggleSlider disabled={updatingNotifications} />
+              </ToggleSwitch>
+              <ToggleStatus enabled={notifications.sms}>
+                {notifications.sms ? 'ВКЛ' : 'ВЫКЛ'}
+              </ToggleStatus>
+            </ToggleContainer>
           </NotificationItem>
 
           <NotificationItem>
@@ -530,14 +752,37 @@ const SettingsPage = () => {
                 Уведомления о входе в систему
               </NotificationDescription>
             </NotificationInfo>
-            <ToggleSwitch>
-              <ToggleInput
-                type="checkbox"
-                checked={notifications.security}
-                onChange={() => handleNotificationToggle('security')}
-              />
-              <ToggleSlider />
-            </ToggleSwitch>
+            <ToggleContainer>
+              <ToggleSwitch>
+                <ToggleInput
+                  type="checkbox"
+                  checked={notifications.security}
+                  onChange={() => handleNotificationToggle('security')}
+                  disabled={updatingNotifications}
+                />
+                <ToggleSlider disabled={updatingNotifications} />
+              </ToggleSwitch>
+              <ToggleStatus enabled={notifications.security}>
+                {notifications.security ? 'ВКЛ' : 'ВЫКЛ'}
+              </ToggleStatus>
+            </ToggleContainer>
+          </NotificationItem>
+
+          <NotificationItem>
+            <NotificationInfo>
+              <NotificationTitle>Анализ клиента</NotificationTitle>
+              <NotificationDescription>
+                Запустить анализ данных клиента
+              </NotificationDescription>
+            </NotificationInfo>
+            <Button 
+              variant="primary" 
+              size="sm"
+              onClick={handleAnalyze}
+              disabled={isAnalyzing}
+            >
+              {isAnalyzing ? 'Анализ...' : 'Анализировать'}
+            </Button>
           </NotificationItem>
         </NotificationsCard>
 
@@ -573,6 +818,22 @@ const SettingsPage = () => {
                 onClick={handleDownloadData}
               >
                 Скачать
+              </Button>
+            </SecurityAction>
+
+            <SecurityAction>
+              <SecurityInfo>
+                <SecurityTitle>Демо уведомлений</SecurityTitle>
+                <SecurityDescription>
+                  Показать примеры Toast уведомлений
+                </SecurityDescription>
+              </SecurityInfo>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleDemoToasts}
+              >
+                Демо
               </Button>
             </SecurityAction>
           </SecurityActions>

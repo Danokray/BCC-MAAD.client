@@ -32,7 +32,7 @@ const ToastContainer = styled.div`
   display: flex;
   flex-direction: column;
   gap: ${theme.spacing.sm};
-  max-width: 400px;
+  max-width: 500px;
 `;
 
 const Toast = styled.div`
@@ -45,6 +45,7 @@ const Toast = styled.div`
       case 'error': return theme.colors.error;
       case 'warning': return theme.colors.warning;
       case 'info': return theme.colors.info;
+      case 'recommendation': return theme.colors.primary;
       default: return theme.colors.primary;
     }
   }};
@@ -65,6 +66,7 @@ const ToastIcon = styled.div`
       case 'error': return theme.colors.error;
       case 'warning': return theme.colors.warning;
       case 'info': return theme.colors.info;
+      case 'recommendation': return theme.colors.primary;
       default: return theme.colors.primary;
     }
   }};
@@ -89,6 +91,10 @@ const ToastMessage = styled.p`
   color: ${theme.colors.textSecondary};
   margin: 0;
   line-height: ${theme.typography.lineHeight.normal};
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  max-height: 200px;
+  overflow-y: auto;
 `;
 
 const CloseButton = styled.button`
@@ -118,6 +124,7 @@ const ProgressBar = styled.div`
       case 'error': return theme.colors.error;
       case 'warning': return theme.colors.warning;
       case 'info': return theme.colors.info;
+      case 'recommendation': return theme.colors.primary;
       default: return theme.colors.primary;
     }
   }};
@@ -166,6 +173,7 @@ const ToastComponent = ({
       case 'error': return '✕';
       case 'warning': return '⚠';
       case 'info': return 'ℹ';
+      case 'recommendation': return '💡';
       default: return 'ℹ';
     }
   };
